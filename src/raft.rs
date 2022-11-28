@@ -661,6 +661,55 @@ impl<T: Storage> RaftCore<T> {
         msgs.push(m);
     }
 
+    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64){
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return false;
+        }
+
+        pr.snap_for_recorder = index;
+
+        self.raft_log.snapshot(index, to);
+    }
+
+    fn send_snap_forrecorder(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return false;
+        }
+
+        let snapshot_r = self.raft_log.snapshot(pr.snap_for_recorder, to);
+        if let Err(e) = snapshot_r {
+            if e == Error::Store(StorageError::SnapshotTemporarilyUnavailable) {
+                debug!(
+                    self.logger,
+                    "failed to send snapshot to {} because snapshot is temporarily \
+                     unavailable",
+                    to;
+                );
+                return false;
+            }
+            fatal!(self.logger, "unexpected error: {:?}", e);
+        }
+        let snapshot = snapshot_r.unwrap();
+        if snapshot.get_metadata().index == 0 {
+            fatal!(self.logger, "need non-empty snapshot");
+        }
+        let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
+        m.set_snapshot(snapshot);
+        m.set_msg_type(MessageType::MsgSnapshot);
+        true
+
+    }
+
     fn prepare_send_snapshot(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
         if !pr.recent_active {
             debug!(
@@ -794,6 +843,17 @@ impl<T: Storage> RaftCore<T> {
         }
         let mut m = Message::default();
         m.to = to;
+        //发送快照，压缩日志
+        if pr.snap_for_recorder !=0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to){
+            }
+            else {
+                self.send(m, msgs);
+                pr.snap_for_recorder=0;
+                return true;
+            }
+        }
+
         if pr.pending_request_snapshot != INVALID_INDEX {
             // Check pending request snapshot first to avoid unnecessary loading entries.
             if !self.prepare_send_snapshot(&mut m, pr, to) {
@@ -2142,6 +2202,12 @@ impl<T: Storage> Raft<T> {
             }
             MessageType::MsgTransferLeader => {
                 self.handle_transfer_leader(&m);
+            }
+            MessageType::MsgSnapForCompact =>{
+                let to = m.get_from();
+                let mut pr = self.prs.get_mut(to);
+                let index = m.get_index();
+                self.r.prepare_send_snap_forrecorder(index, pr, to);
             }
             _ => {
                 if self.prs().get(m.from).is_none() {

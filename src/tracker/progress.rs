@@ -34,6 +34,8 @@ pub struct Progress {
     /// index of the snapshot.
     pub pending_request_snapshot: u64,
 
+    pub snap_for_recorder: u64,
+
     /// This is true if the progress is recently active. Receiving any messages
     /// from the corresponding follower indicates the progress is active.
     /// RecentActive can be reset to false after an election timeout.
@@ -69,6 +71,7 @@ impl Progress {
             ins: Inflights::new(ins_size),
             commit_group_id: 0,
             committed_index: 0,
+            snap_for_recorder: 0,
         }
     }
 
@@ -77,6 +80,10 @@ impl Progress {
         self.pending_snapshot = 0;
         self.state = state;
         self.ins.reset();
+    }
+
+    fn set_snap_for_recorder(&mut self, idx: u64){
+        self.snap_for_recorder=idx;
     }
 
     pub(crate) fn reset(&mut self, next_idx: u64) {
@@ -88,6 +95,7 @@ impl Progress {
         self.pending_request_snapshot = INVALID_INDEX;
         self.recent_active = false;
         self.ins.reset();
+        self.snap_for_recorder=0;
     }
 
     /// Changes the progress to a probe.
