@@ -2205,7 +2205,7 @@ impl<T: Storage> Raft<T> {
             }
             MessageType::MsgSnapForCompact =>{
                 let to = m.get_from();
-                let mut pr = self.prs.get_mut(to);
+                let mut pr = self.prs.get_mut(to).unwrap();
                 let index = m.get_index();
                 self.r.prepare_send_snap_forrecorder(index, pr, to);
             }
