@@ -668,7 +668,7 @@ impl<T: Storage> RaftCore<T> {
                 "ignore sending snapshot to {} since it is not recently active",
                 to;
             );
-            return false;
+            return ;
         }
 
         pr.snap_for_recorder = index;
