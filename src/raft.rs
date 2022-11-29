@@ -2590,7 +2590,7 @@ impl<T: Storage> Raft<T> {
 
 
         if metadata.get_for_recorder(){
-            self.raft_log.unstable.snapshot = some(m.take_snapshot());
+            self.raft_log.unstable.snapshot = Some(m.take_snapshot());
             return;
         }
         let (sindex, sterm) = (metadata.index, metadata.term);
