@@ -2587,6 +2587,12 @@ impl<T: Storage> Raft<T> {
 
     fn handle_snapshot(&mut self, mut m: Message) {
         let metadata = m.get_snapshot().get_metadata();
+
+
+        if metadata.get_for_recorder(){
+            self.raft_log.unstable.snapshot = some(m.take_snapshot());
+            return;
+        }
         let (sindex, sterm) = (metadata.index, metadata.term);
         if self.restore(m.take_snapshot()) {
             info!(
