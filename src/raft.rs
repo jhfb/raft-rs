@@ -673,7 +673,19 @@ impl<T: Storage> RaftCore<T> {
 
         pr.snap_for_recorder = index;
 
-        self.raft_log.snapshot(index, to);
+        let mut m = Message::default();
+        m.to = to;
+        //发送快照，压缩日志
+        if pr.snap_for_recorder !=0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to){
+            }
+            else {
+                self.send(m, msgs);
+                pr.snap_for_recorder=0;
+                return true;
+            }
+        }
+
     }
 
     fn send_snap_forrecorder(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
@@ -706,6 +718,10 @@ impl<T: Storage> RaftCore<T> {
         let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
         m.set_snapshot(snapshot);
         m.set_msg_type(MessageType::MsgSnapshot);
+        info!(
+            self.logger,
+            "send_snap_forrecorder leader send snap for compact to {to}",
+        );
         true
 
     }

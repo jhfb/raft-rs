@@ -39,6 +39,8 @@ message SnapshotMetadata {
     uint64 index = 2;
     // The term of the applied index.
     uint64 term = 3;
+
+    bool for_recorder = 4;
 }
 
 message Snapshot {
