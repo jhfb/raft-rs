@@ -661,7 +661,7 @@ impl<T: Storage> RaftCore<T> {
         msgs.push(m);
     }
 
-    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64, msgs: &mut Message){
+    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64, msgs: &mut Vec<Message>){
         if !pr.recent_active {
             debug!(
                 self.logger,
