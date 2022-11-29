@@ -661,7 +661,7 @@ impl<T: Storage> RaftCore<T> {
         msgs.push(m);
     }
 
-    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64){
+    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64, msgs: &mut Message){
         if !pr.recent_active {
             debug!(
                 self.logger,
@@ -682,7 +682,6 @@ impl<T: Storage> RaftCore<T> {
             else {
                 self.send(m, msgs);
                 pr.snap_for_recorder=0;
-                return true;
             }
         }
 
@@ -2223,7 +2222,7 @@ impl<T: Storage> Raft<T> {
                 let to = m.get_from();
                 let mut pr = self.prs.get_mut(to).unwrap();
                 let index = m.get_index();
-                self.r.prepare_send_snap_forrecorder(index, pr, to);
+                self.r.prepare_send_snap_forrecorder(index, pr, to, &mut self.msgs);
             }
             _ => {
                 if self.prs().get(m.from).is_none() {
