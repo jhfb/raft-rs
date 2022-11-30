@@ -506,18 +506,21 @@ impl<T: Storage> RawNode<T> {
         }
 
         if let Some(snapshot) = &raft.raft_log.unstable_snapshot() {
+            let for_recorder = snapshot.get_metadata().get_for_recorder();
             rd.snapshot = snapshot.clone();
-            assert!(self.commit_since_index <= rd.snapshot.get_metadata().index);
-            self.commit_since_index = rd.snapshot.get_metadata().index;
-            // If there is a snapshot, the latter entries can not be persisted
-            // so there is no committed entries.
-            assert!(
-                !raft
-                    .raft_log
-                    .has_next_entries_since(self.commit_since_index),
-                "has snapshot but also has committed entries since {}",
-                self.commit_since_index
-            );
+            if !for_recorder{
+                assert!(self.commit_since_index <= rd.snapshot.get_metadata().index);
+                self.commit_since_index = rd.snapshot.get_metadata().index;
+                // If there is a snapshot, the latter entries can not be persisted
+                // so there is no committed entries.
+                assert!(
+                    !raft
+                        .raft_log
+                        .has_next_entries_since(self.commit_since_index),
+                    "has snapshot but also has committed entries since {}",
+                    self.commit_since_index
+                );
+            }
             rd_record.snapshot = Some((
                 rd.snapshot.get_metadata().index,
                 rd.snapshot.get_metadata().term,
