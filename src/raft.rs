@@ -600,6 +600,9 @@ impl<T: Storage> Raft<T> {
 impl<T: Storage> RaftCore<T> {
     // send persists state to stable storage and then sends to its mailbox.
     fn send(&mut self, mut m: Message, msgs: &mut Vec<Message>) {
+        if m.get_msg_type() == MessageType::MsgSnapshot{
+            m.set_term(0);
+        }
         debug!(
             self.logger,
             "Sending from {from} to {to}",
