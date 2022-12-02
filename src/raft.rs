@@ -720,7 +720,6 @@ impl<T: Storage> RaftCore<T> {
         let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
         m.set_snapshot(snapshot);
         m.set_msg_type(MessageType::MsgSnapshot);
-        //m.set_term(self.term);
         info!(
             self.logger,
             "send_snap_forrecorder leader send snap for compact to {to}",
