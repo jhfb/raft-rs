@@ -83,7 +83,7 @@ impl Progress {
     }
 
     fn set_snap_for_recorder(&mut self, idx: u64){
-        self.snap_for_recorder=idx;
+        self.snap_for_recorder = idx;
     }
 
     pub(crate) fn reset(&mut self, next_idx: u64) {
