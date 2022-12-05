@@ -95,7 +95,7 @@ impl Progress {
         self.pending_request_snapshot = INVALID_INDEX;
         self.recent_active = false;
         self.ins.reset();
-        self.snap_for_recorder=0;
+        self.snap_for_recorder = 0;
     }
 
     /// Changes the progress to a probe.
