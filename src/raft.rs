@@ -729,6 +729,7 @@ impl<T: Storage> RaftCore<T> {
         if m.get_term() == 0 {
             m.set_term(0);
             info!(
+                self.logger,
                 "snapshot==0!you bug";
             );
         }
