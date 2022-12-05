@@ -602,6 +602,9 @@ impl<T: Storage> RaftCore<T> {
     fn send(&mut self, mut m: Message, msgs: &mut Vec<Message>) {
         if m.get_msg_type() == MessageType::MsgSnapshot{
             m.set_term(0);
+            info!(
+                "snapshot==0!you bug";
+            );
         }
         debug!(
             self.logger,
