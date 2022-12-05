@@ -82,7 +82,7 @@ impl Progress {
         self.ins.reset();
     }
 
-    fn set_snap_for_recorder(&mut self, idx: u64){
+    fn set_snap_for_recorder(&mut self, idx: u64) {
         self.snap_for_recorder = idx;
     }
 

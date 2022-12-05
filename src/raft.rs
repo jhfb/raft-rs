@@ -661,14 +661,20 @@ impl<T: Storage> RaftCore<T> {
         msgs.push(m);
     }
 
-    fn prepare_send_snap_forrecorder(&mut self, index: u64, pr: & mut Progress, to: u64, msgs: &mut Vec<Message>){
+    fn prepare_send_snap_forrecorder(
+        &mut self, 
+        index: u64, 
+        pr: & mut Progress, 
+        to: u64, 
+        msgs: &mut Vec<Message>
+    ) {
         if !pr.recent_active {
             debug!(
                 self.logger,
                 "ignore sending snapshot to {} since it is not recently active",
                 to;
             );
-            return ;
+            return;
         }
 
         pr.snap_for_recorder = index;
@@ -676,15 +682,13 @@ impl<T: Storage> RaftCore<T> {
         let mut m = Message::default();
         m.to = to;
         //发送快照，压缩日志
-        if pr.snap_for_recorder !=0 {
-            if !self.send_snap_forrecorder(&mut m, pr, to){
-            }
-            else {
+        if pr.snap_for_recorder != 0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to) {
+            } else {
                 self.send(m, msgs);
-                pr.snap_for_recorder=0;
+                pr.snap_for_recorder = 0;
             }
         }
-
     }
 
     fn send_snap_forrecorder(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
@@ -722,14 +726,13 @@ impl<T: Storage> RaftCore<T> {
             "send_snap_forrecorder leader send snap for compact to {to}",
         );
 
-        if m.get_term()==0 {
+        if m.get_term() == 0 {
             m.set_term(0);
             info!(
                 "snapshot==0!you bug";
             );
         }
         true
-
     }
 
     fn prepare_send_snapshot(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
@@ -866,12 +869,11 @@ impl<T: Storage> RaftCore<T> {
         let mut m = Message::default();
         m.to = to;
         //发送快照，压缩日志
-        if pr.snap_for_recorder !=0 {
-            if !self.send_snap_forrecorder(&mut m, pr, to){
-            }
-            else {
+        if pr.snap_for_recorder != 0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to) {
+            } else {
                 self.send(m, msgs);
-                pr.snap_for_recorder=0;
+                pr.snap_for_recorder = 0;
                 return true;
             }
         }
@@ -2225,11 +2227,12 @@ impl<T: Storage> Raft<T> {
             MessageType::MsgTransferLeader => {
                 self.handle_transfer_leader(&m);
             }
-            MessageType::MsgSnapForCompact =>{
+            MessageType::MsgSnapForCompact => {
                 let to = m.get_from();
                 let mut pr = self.prs.get_mut(to).unwrap();
                 let index = m.get_index();
-                self.r.prepare_send_snap_forrecorder(index, pr, to, &mut self.msgs);
+                self.r
+                    .prepare_send_snap_forrecorder(index, pr, to, &mut self.msgs);
             }
             _ => {
                 if self.prs().get(m.from).is_none() {
@@ -2595,7 +2598,7 @@ impl<T: Storage> Raft<T> {
         let metadata = m.get_snapshot().get_metadata();
 
 
-        if metadata.get_for_recorder(){
+        if metadata.get_for_recorder() {
             self.raft_log.unstable.snapshot = Some(m.take_snapshot());
             return;
         }
