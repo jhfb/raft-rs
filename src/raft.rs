@@ -662,11 +662,11 @@ impl<T: Storage> RaftCore<T> {
     }
 
     fn prepare_send_snap_forrecorder(
-        &mut self, 
-        index: u64, 
-        pr: & mut Progress, 
-        to: u64, 
-        msgs: &mut Vec<Message>
+        &mut self,
+        index: u64,
+        pr: &mut Progress,
+        to: u64,
+        msgs: &mut Vec<Message>,
     ) {
         if !pr.recent_active {
             debug!(
@@ -2596,8 +2596,6 @@ impl<T: Storage> Raft<T> {
 
     fn handle_snapshot(&mut self, mut m: Message) {
         let metadata = m.get_snapshot().get_metadata();
-
-
         if metadata.get_for_recorder() {
             self.raft_log.unstable.snapshot = Some(m.take_snapshot());
             return;
