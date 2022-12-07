@@ -41,6 +41,7 @@ use crate::quorum::VoteResult;
 use crate::util;
 use crate::util::NO_LIMIT;
 use crate::{confchange, Progress, ProgressState, ProgressTracker};
+use minstant::Instant;
 
 // CAMPAIGN_PRE_ELECTION represents the first phase of a normal election when
 // Config.pre_vote is true.
@@ -248,6 +249,7 @@ pub struct RaftCore<T: Storage> {
     randomized_election_timeout: usize,
     min_election_timeout: usize,
     max_election_timeout: usize,
+    election_time: Option<usize>,
 
     /// The logger for the raft structure.
     pub(crate) logger: slog::Logger,
@@ -350,6 +352,7 @@ impl<T: Storage> Raft<T> {
                 randomized_election_timeout: Default::default(),
                 min_election_timeout: c.min_election_tick(),
                 max_election_timeout: c.max_election_tick(),
+                election_time: None,
                 skip_bcast_commit: c.skip_bcast_commit,
                 batch_append: c.batch_append,
                 logger,
@@ -1155,7 +1158,11 @@ impl<T: Storage> Raft<T> {
         if !self.pass_election_timeout() || !self.promotable {
             return false;
         }
-
+        //超时，开始选举
+        // match self.election_time {
+        //     Some(t) =>,
+        //     None => //设置时间
+        // }
         self.election_elapsed = 0;
         let m = new_message(INVALID_ID, MessageType::MsgHup, Some(self.id));
         let _ = self.step(m);
