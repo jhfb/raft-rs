@@ -155,6 +155,7 @@ pub trait Storage {
     /// A snapshot's index must not less than the `request_index`.
     /// `to` indicates which peer is requesting the snapshot.
     fn snapshot(&self, request_index: u64, to: u64) -> Result<Snapshot>;
+    fn is_recorder(&self) -> bool;
 }
 
 /// The Memory Storage Core instance holds the actual state of the storage struct. To access this

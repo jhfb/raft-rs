@@ -16,6 +16,7 @@
 
 use std::cmp;
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 
 use crate::eraftpb::{
     ConfChange, ConfChangeV2, ConfState, Entry, EntryType, HardState, Message, MessageType,
@@ -249,7 +250,7 @@ pub struct RaftCore<T: Storage> {
     randomized_election_timeout: usize,
     min_election_timeout: usize,
     max_election_timeout: usize,
-    election_time: Option<usize>,
+    election_time: Option<Instant>,
 
     /// The logger for the raft structure.
     pub(crate) logger: slog::Logger,
@@ -1064,7 +1065,7 @@ impl<T: Storage> Raft<T> {
             self.vote = INVALID_ID;
         }
         self.leader_id = INVALID_ID;
-        self.reset_randomized_election_timeout();
+        //self.reset_randomized_election_timeout();
         self.election_elapsed = 0;
         self.heartbeat_elapsed = 0;
 
@@ -1159,10 +1160,12 @@ impl<T: Storage> Raft<T> {
             return false;
         }
         //超时，开始选举
-        // match self.election_time {
-        //     Some(t) =>,
-        //     None => //设置时间
-        // }
+        match self.election_time {
+            Some(t) =>,
+            None => {
+                self.election_time = Instant::now();
+            }
+        }
         self.election_elapsed = 0;
         let m = new_message(INVALID_ID, MessageType::MsgHup, Some(self.id));
         let _ = self.step(m);
@@ -1203,6 +1206,9 @@ impl<T: Storage> Raft<T> {
 
     /// Converts this node to a follower.
     pub fn become_follower(&mut self, term: u64, leader_id: u64) {
+        if leader_id != INVALID_ID {
+            self.election_time = None;
+        }
         let pending_request_snapshot = self.pending_request_snapshot;
         self.reset(term);
         self.leader_id = leader_id;
@@ -1213,6 +1219,7 @@ impl<T: Storage> Raft<T> {
             "became follower at term {term}",
             term = self.term;
         );
+        self.reset_randomized_election_timeout();
     }
 
     // TODO: revoke pub when there is a better way to test.
@@ -1237,6 +1244,7 @@ impl<T: Storage> Raft<T> {
             "became candidate at term {term}",
             term = self.term;
         );
+        self.reset_randomized_election_timeout();
     }
 
     /// Converts this node to a pre-candidate
@@ -1272,6 +1280,13 @@ impl<T: Storage> Raft<T> {
     ///
     /// Panics if this is a follower node.
     pub fn become_leader(&mut self) {
+        let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
+        info!(
+            self.logger,
+            "election new leader after {time1}",
+            time1 = time;
+        );
+        self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
         assert_ne!(
             self.state,
@@ -1280,6 +1295,7 @@ impl<T: Storage> Raft<T> {
         );
         let term = self.term;
         self.reset(term);
+        self.reset_randomized_election_timeout();
         self.leader_id = self.id;
         self.state = StateRole::Leader;
 
@@ -2333,6 +2349,7 @@ impl<T: Storage> Raft<T> {
                 // m.term > self.term; reuse self.term
                 let term = self.term;
                 self.become_follower(term, INVALID_ID);
+                self.reset_election_timeout();
             }
             VoteResult::Pending => (),
         }
@@ -2886,8 +2903,16 @@ impl<T: Storage> Raft<T> {
     /// Regenerates and stores the election timeout.
     pub fn reset_randomized_election_timeout(&mut self) {
         let prev_timeout = self.randomized_election_timeout;
-        let timeout =
-            rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout);
+        let recorder = self.raft_log.store().is_recorder();
+        let left1 = (self.max_election_timeout+self.min_election_timeout)/2;
+        let left2 = (self.max_election_timeout+self.min_election_timeout)/3;
+        let timeout = match recorder {
+            false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
+            true => match self.state {
+                StateRole::Follower || StateRole::Leader => rand::thread_rng().gen_range(left1..self.max_election_timeout),
+                _ => rand::thread_rng().gen_range(left2..self.max_election_timeout),
+            }
+        }
         debug!(
             self.logger,
             "reset election timeout {prev_timeout} -> {timeout} at {election_elapsed}",
@@ -2897,6 +2922,18 @@ impl<T: Storage> Raft<T> {
         );
         self.randomized_election_timeout = timeout;
     }
+
+    pub fn reset_election_timeout(&mut self) {
+        let recorder = self.raft_log.store().is_recorder();
+        let left2 = (self.max_election_timeout+self.min_election_timeout)/3;
+        let timeout = match recorder {
+            false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
+            true => rand::thread_rng().gen_range(left2..self.max_election_timeout),
+            }
+        }
+        self.randomized_election_timeout = timeout;
+    }
+
 
     // check_quorum_active returns true if the quorum is active from
     // the view of the local raft state machine. Otherwise, it returns
