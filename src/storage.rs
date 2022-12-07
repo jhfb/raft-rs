@@ -516,6 +516,10 @@ impl Storage for MemStorage {
             Ok(snap)
         }
     }
+
+    fn is_recorder(&self) -> bool {
+        return  false;
+    }
 }
 
 #[cfg(test)]
