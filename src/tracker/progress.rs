@@ -35,6 +35,7 @@ pub struct Progress {
     pub pending_request_snapshot: u64,
 
     pub snap_for_recorder: u64,
+    pub snap_for_split: u64,
 
     /// This is true if the progress is recently active. Receiving any messages
     /// from the corresponding follower indicates the progress is active.
@@ -72,6 +73,7 @@ impl Progress {
             commit_group_id: 0,
             committed_index: 0,
             snap_for_recorder: 0,
+            snap_for_split: 0,
         }
     }
 

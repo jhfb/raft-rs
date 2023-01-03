@@ -695,6 +695,82 @@ impl<T: Storage> RaftCore<T> {
         }
     }
 
+    fn prepare_send_snap_forsplit(
+        &mut self,
+        index: u64,
+        pr: &mut Progress,
+        to: u64,
+        msgs: &mut Vec<Message>,
+    ) {
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return;
+        }
+
+        let commit = cmp::max(index, self.raft_log.committed);
+        pr.snap_for_split = commit;
+
+        let mut m = Message::default();
+        m.to = to;
+        //发送快照，压缩日志
+        if pr.snap_for_recorder != 0 {
+            if !self.send_snap_forsplit(&mut m, pr, to) {
+            } else {
+                self.send(m, msgs);
+                pr.snap_for_recorder = 0;
+            }
+        }
+    }
+
+    fn send_snap_forsplit(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return false;
+        }
+
+        let snapshot_r = self.raft_log.snapshot(pr.snap_for_split, to);
+        if let Err(e) = snapshot_r {
+            if e == Error::Store(StorageError::SnapshotTemporarilyUnavailable) {
+                debug!(
+                    self.logger,
+                    "failed to send snapshot to {} because snapshot is temporarily \
+                     unavailable",
+                    to;
+                );
+                return false;
+            }
+            fatal!(self.logger, "unexpected error: {:?}", e);
+        }
+        let snapshot = snapshot_r.unwrap();
+        if snapshot.get_metadata().index == 0 {
+            fatal!(self.logger, "need non-empty snapshot");
+        }
+        let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
+        m.set_snapshot(snapshot);
+        m.set_msg_type(MessageType::MsgSnapshot);
+        info!(
+            self.logger,
+            "send_snap_forrecorder leader send snap for compact to {to}",
+        );
+
+        if m.get_term() == 0 {
+            m.set_term(0);
+            info!(
+                self.logger,
+                "snapshot==0!you bug";
+            );
+        }
+        true
+    }
+
     fn send_snap_forrecorder(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
         if !pr.recent_active {
             debug!(
@@ -879,6 +955,16 @@ impl<T: Storage> RaftCore<T> {
             } else {
                 self.send(m, msgs);
                 pr.snap_for_recorder = 0;
+                return true;
+            }
+        }
+
+        if pr.snap_for_split != 0 {
+            if !self.send_snap_forsplit(&mut m, pr, to) {
+                return false;
+            } else {
+                self.send(m, msgs);
+                pr.snap_for_split = 0;
                 return true;
             }
         }
@@ -2277,6 +2363,14 @@ impl<T: Storage> Raft<T> {
                 let index = m.get_index();
                 self.r
                     .prepare_send_snap_forrecorder(index, pr, to, &mut self.msgs);
+            }
+
+            MessageType::MsgSnapForRecorder => {
+                let to = m.get_from();
+                let mut pr = self.prs.get_mut(to).unwrap();
+                let index = m.get_index();
+                self.r
+                    .prepare_send_snap_forsplit(index, pr, to, &mut self.msgs);
             }
             _ => {
                 if self.prs().get(m.from).is_none() {
