@@ -1282,10 +1282,13 @@ impl<T: Storage> Raft<T> {
     ///
     /// Panics if this is a follower node.
     pub fn become_leader(&mut self) {
+        let recorder = self.raft_log.store().is_recorder();
         let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
         info!(
             self.logger,
             "election new leader after {:?}",time
+            "peer is " => recorder,
+            "id" => self.id,
         );
         self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
@@ -1614,9 +1617,12 @@ impl<T: Storage> Raft<T> {
             debug!(
                 self.logger,
                 "ignoring MsgHup because already leader";
+                "id" => self.id,
             );
             return;
         }
+
+
 
         // If there is a pending snapshot, its index will be returned by
         // `maybe_first_index`. Note that snapshot updates configuration
@@ -1660,6 +1666,19 @@ impl<T: Storage> Raft<T> {
             "starting a new election";
             "term" => self.term,
         );
+        match self.election_time {
+            Some(e) =>{
+
+            }
+            None =>{
+                self.election_time = Some(Instant::now());
+                info!(
+                    self.logger,
+                    "transfer leader!";
+                    "term" => self.term,
+                );
+            }
+        }
         if transfer_leader {
             self.campaign(CAMPAIGN_TRANSFER);
         } else if self.pre_vote {
