@@ -26,6 +26,7 @@ use protobuf::Message as _;
 use raft_proto::ConfChangeI;
 use rand::{self, Rng};
 use slog::{self, Logger};
+use minstant::Instant;
 
 #[cfg(feature = "failpoints")]
 use fail::fail_point;
