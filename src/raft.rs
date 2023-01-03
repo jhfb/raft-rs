@@ -1165,7 +1165,7 @@ impl<T: Storage> Raft<T> {
 
             }
             None => {
-                self.election_time = Instant::now();
+                self.election_time = Some(Instant::now());
             }
         }
         self.election_elapsed = 0;
@@ -1285,8 +1285,7 @@ impl<T: Storage> Raft<T> {
         let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
         info!(
             self.logger,
-            "election new leader after {time1}",
-            time1 = time;
+            "election new leader after {:?}",time
         );
         self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
