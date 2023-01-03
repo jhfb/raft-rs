@@ -1161,7 +1161,9 @@ impl<T: Storage> Raft<T> {
         }
         //超时，开始选举
         match self.election_time {
-            Some(t) =>,
+            Some(t) =>{
+
+            }
             None => {
                 self.election_time = Instant::now();
             }
@@ -2909,10 +2911,10 @@ impl<T: Storage> Raft<T> {
         let timeout = match recorder {
             false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
             true => match self.state {
-                StateRole::Follower || StateRole::Leader => rand::thread_rng().gen_range(left1..self.max_election_timeout),
+                StateRole::Follower | StateRole::Leader => rand::thread_rng().gen_range(left1..self.max_election_timeout),
                 _ => rand::thread_rng().gen_range(left2..self.max_election_timeout),
             }
-        }
+        };
         debug!(
             self.logger,
             "reset election timeout {prev_timeout} -> {timeout} at {election_elapsed}",
@@ -2929,7 +2931,7 @@ impl<T: Storage> Raft<T> {
         let timeout = match recorder {
             false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
             true => rand::thread_rng().gen_range(left2..self.max_election_timeout),
-        }
+        };
         self.randomized_election_timeout = timeout;
     }
 
