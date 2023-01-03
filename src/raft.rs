@@ -249,6 +249,7 @@ pub struct RaftCore<T: Storage> {
     randomized_election_timeout: usize,
     min_election_timeout: usize,
     max_election_timeout: usize,
+    election_time: Option<Instant>,
 
     /// The logger for the raft structure.
     pub(crate) logger: slog::Logger,
@@ -353,6 +354,7 @@ impl<T: Storage> Raft<T> {
                 lead_transferee: None,
                 term: Default::default(),
                 election_elapsed: Default::default(),
+                election_time: None,
                 pending_conf_index: Default::default(),
                 vote: Default::default(),
                 heartbeat_elapsed: Default::default(),
@@ -1084,6 +1086,16 @@ impl<T: Storage> Raft<T> {
             return false;
         }
 
+            //超时，开始选举
+            match self.election_time {
+                Some(t) =>{
+    
+                }
+                None => {
+                    self.election_time = Some(Instant::now());
+                }
+            }    
+
         self.election_elapsed = 0;
         let m = new_message(INVALID_ID, MessageType::MsgHup, Some(self.id));
         let _ = self.step(m);
@@ -1124,6 +1136,9 @@ impl<T: Storage> Raft<T> {
 
     /// Converts this node to a follower.
     pub fn become_follower(&mut self, term: u64, leader_id: u64) {
+        if leader_id != INVALID_ID {
+            self.election_time = None;
+        }
         let pending_request_snapshot = self.pending_request_snapshot;
         self.reset(term);
         self.leader_id = leader_id;
@@ -1193,6 +1208,13 @@ impl<T: Storage> Raft<T> {
     ///
     /// Panics if this is a follower node.
     pub fn become_leader(&mut self) {
+        let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
+        info!(
+            self.logger,
+            "election new leader after {:?}",time;
+            "id" => self.id,
+        );
+        self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
         assert_ne!(
             self.state,
@@ -1564,6 +1586,19 @@ impl<T: Storage> Raft<T> {
             "starting a new election";
             "term" => self.term,
         );
+        match self.election_time {
+            Some(e) =>{
+
+            }
+            None =>{
+                self.election_time = Some(Instant::now());
+                info!(
+                    self.logger,
+                    "transfer leader!";
+                    "term" => self.term,
+                );
+            }
+        }
         if transfer_leader {
             self.campaign(CAMPAIGN_TRANSFER);
         } else if self.pre_vote {
