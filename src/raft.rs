@@ -16,6 +16,7 @@
 
 use std::cmp;
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 
 use crate::eraftpb::{
     ConfChange, ConfChangeV2, ConfState, Entry, EntryType, HardState, Message, MessageType,
@@ -41,6 +42,7 @@ use crate::quorum::VoteResult;
 use crate::util;
 use crate::util::NO_LIMIT;
 use crate::{confchange, Progress, ProgressState, ProgressTracker};
+use minstant::Instant;
 
 // CAMPAIGN_PRE_ELECTION represents the first phase of a normal election when
 // Config.pre_vote is true.
@@ -248,6 +250,7 @@ pub struct RaftCore<T: Storage> {
     randomized_election_timeout: usize,
     min_election_timeout: usize,
     max_election_timeout: usize,
+    election_time: Option<Instant>,
 
     /// The logger for the raft structure.
     pub(crate) logger: slog::Logger,
@@ -350,6 +353,7 @@ impl<T: Storage> Raft<T> {
                 randomized_election_timeout: Default::default(),
                 min_election_timeout: c.min_election_tick(),
                 max_election_timeout: c.max_election_tick(),
+                election_time: None,
                 skip_bcast_commit: c.skip_bcast_commit,
                 batch_append: c.batch_append,
                 logger,
@@ -661,6 +665,81 @@ impl<T: Storage> RaftCore<T> {
         msgs.push(m);
     }
 
+    fn prepare_send_snap_forrecorder(
+        &mut self,
+        index: u64,
+        pr: &mut Progress,
+        to: u64,
+        msgs: &mut Vec<Message>,
+    ) {
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return;
+        }
+
+        pr.snap_for_recorder = index;
+
+        let mut m = Message::default();
+        m.to = to;
+        //发送快照，压缩日志
+        if pr.snap_for_recorder != 0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to) {
+            } else {
+                self.send(m, msgs);
+                pr.snap_for_recorder = 0;
+            }
+        }
+    }
+
+    fn send_snap_forrecorder(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
+        if !pr.recent_active {
+            debug!(
+                self.logger,
+                "ignore sending snapshot to {} since it is not recently active",
+                to;
+            );
+            return false;
+        }
+
+        let snapshot_r = self.raft_log.snapshot(pr.snap_for_recorder, to);
+        if let Err(e) = snapshot_r {
+            if e == Error::Store(StorageError::SnapshotTemporarilyUnavailable) {
+                debug!(
+                    self.logger,
+                    "failed to send snapshot to {} because snapshot is temporarily \
+                     unavailable",
+                    to;
+                );
+                return false;
+            }
+            fatal!(self.logger, "unexpected error: {:?}", e);
+        }
+        let snapshot = snapshot_r.unwrap();
+        if snapshot.get_metadata().index == 0 {
+            fatal!(self.logger, "need non-empty snapshot");
+        }
+        let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
+        m.set_snapshot(snapshot);
+        m.set_msg_type(MessageType::MsgSnapshot);
+        info!(
+            self.logger,
+            "send_snap_forrecorder leader send snap for compact to {to}",
+        );
+
+        if m.get_term() == 0 {
+            m.set_term(0);
+            info!(
+                self.logger,
+                "snapshot==0!you bug";
+            );
+        }
+        true
+    }
+
     fn prepare_send_snapshot(&mut self, m: &mut Message, pr: &mut Progress, to: u64) -> bool {
         if !pr.recent_active {
             debug!(
@@ -794,6 +873,16 @@ impl<T: Storage> RaftCore<T> {
         }
         let mut m = Message::default();
         m.to = to;
+        //发送快照，压缩日志
+        if pr.snap_for_recorder != 0 {
+            if !self.send_snap_forrecorder(&mut m, pr, to) {
+            } else {
+                self.send(m, msgs);
+                pr.snap_for_recorder = 0;
+                return true;
+            }
+        }
+
         if pr.pending_request_snapshot != INVALID_INDEX {
             // Check pending request snapshot first to avoid unnecessary loading entries.
             if !self.prepare_send_snapshot(&mut m, pr, to) {
@@ -976,7 +1065,7 @@ impl<T: Storage> Raft<T> {
             self.vote = INVALID_ID;
         }
         self.leader_id = INVALID_ID;
-        self.reset_randomized_election_timeout();
+        //self.reset_randomized_election_timeout();
         self.election_elapsed = 0;
         self.heartbeat_elapsed = 0;
 
@@ -1070,7 +1159,13 @@ impl<T: Storage> Raft<T> {
         if !self.pass_election_timeout() || !self.promotable {
             return false;
         }
-
+        //超时，开始选举
+        match self.election_time {
+            Some(t) =>,
+            None => {
+                self.election_time = Instant::now();
+            }
+        }
         self.election_elapsed = 0;
         let m = new_message(INVALID_ID, MessageType::MsgHup, Some(self.id));
         let _ = self.step(m);
@@ -1111,6 +1206,9 @@ impl<T: Storage> Raft<T> {
 
     /// Converts this node to a follower.
     pub fn become_follower(&mut self, term: u64, leader_id: u64) {
+        if leader_id != INVALID_ID {
+            self.election_time = None;
+        }
         let pending_request_snapshot = self.pending_request_snapshot;
         self.reset(term);
         self.leader_id = leader_id;
@@ -1121,6 +1219,7 @@ impl<T: Storage> Raft<T> {
             "became follower at term {term}",
             term = self.term;
         );
+        self.reset_randomized_election_timeout();
     }
 
     // TODO: revoke pub when there is a better way to test.
@@ -1145,6 +1244,7 @@ impl<T: Storage> Raft<T> {
             "became candidate at term {term}",
             term = self.term;
         );
+        self.reset_randomized_election_timeout();
     }
 
     /// Converts this node to a pre-candidate
@@ -1180,6 +1280,13 @@ impl<T: Storage> Raft<T> {
     ///
     /// Panics if this is a follower node.
     pub fn become_leader(&mut self) {
+        let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
+        info!(
+            self.logger,
+            "election new leader after {time1}",
+            time1 = time;
+        );
+        self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
         assert_ne!(
             self.state,
@@ -1188,6 +1295,7 @@ impl<T: Storage> Raft<T> {
         );
         let term = self.term;
         self.reset(term);
+        self.reset_randomized_election_timeout();
         self.leader_id = self.id;
         self.state = StateRole::Leader;
 
@@ -2143,6 +2251,13 @@ impl<T: Storage> Raft<T> {
             MessageType::MsgTransferLeader => {
                 self.handle_transfer_leader(&m);
             }
+            MessageType::MsgSnapForCompact => {
+                let to = m.get_from();
+                let mut pr = self.prs.get_mut(to).unwrap();
+                let index = m.get_index();
+                self.r
+                    .prepare_send_snap_forrecorder(index, pr, to, &mut self.msgs);
+            }
             _ => {
                 if self.prs().get(m.from).is_none() {
                     debug!(
@@ -2234,6 +2349,7 @@ impl<T: Storage> Raft<T> {
                 // m.term > self.term; reuse self.term
                 let term = self.term;
                 self.become_follower(term, INVALID_ID);
+                self.reset_election_timeout();
             }
             VoteResult::Pending => (),
         }
@@ -2505,6 +2621,10 @@ impl<T: Storage> Raft<T> {
 
     fn handle_snapshot(&mut self, mut m: Message) {
         let metadata = m.get_snapshot().get_metadata();
+        if metadata.get_for_recorder() {
+            self.raft_log.unstable.snapshot = Some(m.take_snapshot());
+            return;
+        }
         let (sindex, sterm) = (metadata.index, metadata.term);
         if self.restore(m.take_snapshot()) {
             info!(
@@ -2783,8 +2903,16 @@ impl<T: Storage> Raft<T> {
     /// Regenerates and stores the election timeout.
     pub fn reset_randomized_election_timeout(&mut self) {
         let prev_timeout = self.randomized_election_timeout;
-        let timeout =
-            rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout);
+        let recorder = self.raft_log.store().is_recorder();
+        let left1 = (self.max_election_timeout+self.min_election_timeout)/2;
+        let left2 = (self.max_election_timeout+self.min_election_timeout)/3;
+        let timeout = match recorder {
+            false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
+            true => match self.state {
+                StateRole::Follower || StateRole::Leader => rand::thread_rng().gen_range(left1..self.max_election_timeout),
+                _ => rand::thread_rng().gen_range(left2..self.max_election_timeout),
+            }
+        }
         debug!(
             self.logger,
             "reset election timeout {prev_timeout} -> {timeout} at {election_elapsed}",
@@ -2794,6 +2922,18 @@ impl<T: Storage> Raft<T> {
         );
         self.randomized_election_timeout = timeout;
     }
+
+    pub fn reset_election_timeout(&mut self) {
+        let recorder = self.raft_log.store().is_recorder();
+        let left2 = (self.max_election_timeout+self.min_election_timeout)/3;
+        let timeout = match recorder {
+            false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
+            true => rand::thread_rng().gen_range(left2..self.max_election_timeout),
+            }
+        }
+        self.randomized_election_timeout = timeout;
+    }
+
 
     // check_quorum_active returns true if the quorum is active from
     // the view of the local raft state machine. Otherwise, it returns
