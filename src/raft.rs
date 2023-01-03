@@ -1286,7 +1286,7 @@ impl<T: Storage> Raft<T> {
         let time = self.election_time.unwrap_or_else(|| minstant::Instant::now()).elapsed();
         info!(
             self.logger,
-            "election new leader after {:?}",time,
+            "election new leader after {:?}",time;
             "peer is recorder?" => recorder,
             "id" => self.id,
         );
