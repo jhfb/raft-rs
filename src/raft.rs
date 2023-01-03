@@ -2929,7 +2929,6 @@ impl<T: Storage> Raft<T> {
         let timeout = match recorder {
             false => rand::thread_rng().gen_range(self.min_election_timeout..self.max_election_timeout),
             true => rand::thread_rng().gen_range(left2..self.max_election_timeout),
-            }
         }
         self.randomized_election_timeout = timeout;
     }
