@@ -69,6 +69,7 @@ enum MessageType {
     MsgRequestPreVote = 17;
     MsgRequestPreVoteResponse = 18;
     MsgSnapForCompact = 19;
+    MsgSnapForRecorder = 20;
 }
 
 message Message {
