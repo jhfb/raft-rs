@@ -1373,8 +1373,13 @@ impl<T: Storage> Raft<T> {
         info!(
             self.logger,
             "election new leader after {:?}",time;
-            "peer is recorder?" => recorder,
+            "peer is recorder?{recorder}" => recorder,
             "id" => self.id,
+        );
+        info!(
+            self.logger,
+            "election new leader is Recorder?Recorder:{recorder}",
+            recorder = recorder;
         );
         self.election_time = None;
         trace!(self.logger, "ENTER become_leader");
