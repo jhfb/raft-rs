@@ -803,7 +803,7 @@ impl<T: Storage> RaftCore<T> {
         m.set_msg_type(MessageType::MsgSnapshot);
         info!(
             self.logger,
-            "send_snap_forrecorder leader send snap for compact to {to}",
+            "send_snap_forrecorder leader send snap for split to {to}",
         );
 
         if m.get_term() == 0 {
