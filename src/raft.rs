@@ -3022,23 +3022,23 @@ impl<T: Storage> Raft<T> {
     /// Regenerates and stores the election timeout.
     pub fn reset_randomized_election_timeout(&mut self) {
         info!(
-            r.logger,
+            self.logger,
             "newRaft1";
         );
         let prev_timeout = self.randomized_election_timeout;
         info!(
-            r.logger,
+            self.logger,
             "newRaft2";
         );
         let recorder = self.raft_log.store().is_recorder();
         info!(
-            r.logger,
+            self.logger,
             "newRaft3";
         );
         let left1 = (self.max_election_timeout+self.min_election_timeout)/2;
         let left2 = (self.max_election_timeout+self.min_election_timeout)/3;
         info!(
-            r.logger,
+            self.logger,
             "newRaft4";
         );
         let timeout = match recorder {
@@ -3049,7 +3049,7 @@ impl<T: Storage> Raft<T> {
             }
         };
         info!(
-            r.logger,
+            self.logger,
             "newRaft5";
         );
         debug!(
@@ -3060,7 +3060,7 @@ impl<T: Storage> Raft<T> {
             election_elapsed = self.election_elapsed;
         );
         info!(
-            r.logger,
+            self.logger,
             "newRaft6";
         );
         self.randomized_election_timeout = timeout;
