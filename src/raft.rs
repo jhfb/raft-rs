@@ -813,6 +813,7 @@ impl<T: Storage> RaftCore<T> {
        // let anchor = Anchor::new();
         let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
         let send_time =  expected as i64;
+        snapshot.mut_metadata().set_send_time(send_time);
         
         m.set_snapshot(snapshot);
         m.set_msg_type(MessageType::MsgSnapshot);
@@ -2755,6 +2756,17 @@ impl<T: Storage> Raft<T> {
 
     fn handle_snapshot(&mut self, mut m: Message) {
         let metadata = m.get_snapshot().get_metadata();
+        //计算快照耗时
+        let send_time = metadata.send_time;
+        let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
+        let revice_time =  expected as i64;
+        let snap_time = revice_time - send_time;
+        info!(
+            self.logger,
+             "create a new snapshot after {:?}",snap_time;
+             "id" => self.id,
+         ); 
+                 
         if metadata.get_for_recorder() {
             self.raft_log.unstable.snapshot = Some(m.take_snapshot());
             return;
