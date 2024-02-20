@@ -809,10 +809,10 @@ impl<T: Storage> RaftCore<T> {
         let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
         
         //记录发送快照的时间
-        let start_send = Instant::now();
-        let anchor = Anchor::new();
+        //let start_send = Instant::now();
+       // let anchor = Anchor::new();
         let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
-        let send_time = (start_send.as_unix_nanos(&anchor) as i64 - expected as i64);
+        let send_time =  expected as i64;
         
         m.set_snapshot(snapshot);
         m.set_msg_type(MessageType::MsgSnapshot);
