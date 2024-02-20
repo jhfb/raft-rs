@@ -812,7 +812,7 @@ impl<T: Storage> RaftCore<T> {
         //let start_send = Instant::now();
        // let anchor = Anchor::new();
         let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
-        let send_time =  expected as i64;
+        let send_time =  expected as u64;
         snapshot.mut_metadata().set_send_time(send_time);
         
         m.set_snapshot(snapshot);
