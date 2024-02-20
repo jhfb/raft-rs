@@ -16,7 +16,7 @@
 
 use std::cmp;
 use std::ops::{Deref, DerefMut};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::eraftpb::{
     ConfChange, ConfChangeV2, ConfState, Entry, EntryType, HardState, Message, MessageType,
@@ -42,7 +42,7 @@ use crate::quorum::VoteResult;
 use crate::util;
 use crate::util::NO_LIMIT;
 use crate::{confchange, Progress, ProgressState, ProgressTracker};
-use minstant::Instant;
+use minstant::{Instant, Anchor};
 
 // CAMPAIGN_PRE_ELECTION represents the first phase of a normal election when
 // Config.pre_vote is true.
@@ -781,8 +781,16 @@ impl<T: Storage> RaftCore<T> {
             return false;
         }
 
+        // 测试获取快照耗时
+        let start = Instant::now();
         let snapshot_r = self.raft_log.snapshot(pr.snap_for_recorder, to);
-        if let Err(e) = snapshot_r {
+        let time = start.elapsed();
+        info!(
+            self.logger,
+             "create a new snapshot after {:?}",time;
+             "id" => self.id,
+         ); 
+       if let Err(e) = snapshot_r {
             if e == Error::Store(StorageError::SnapshotTemporarilyUnavailable) {
                 debug!(
                     self.logger,
@@ -799,6 +807,13 @@ impl<T: Storage> RaftCore<T> {
             fatal!(self.logger, "need non-empty snapshot");
         }
         let (sindex, sterm) = (snapshot.get_metadata().index, snapshot.get_metadata().term);
+        
+        //记录发送快照的时间
+        let start_send = Instant::now();
+        let anchor = Anchor::new();
+        let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
+        let send_time = (start_send.as_unix_nanos(&anchor) as i64 - expected as i64);
+        
         m.set_snapshot(snapshot);
         m.set_msg_type(MessageType::MsgSnapshot);
         info!(

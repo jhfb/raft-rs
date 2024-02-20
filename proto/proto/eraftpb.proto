@@ -41,6 +41,7 @@ message SnapshotMetadata {
     uint64 term = 3;
 
     bool for_recorder = 4;
+    uint64 send_time = 5;
 }
 
 message Snapshot {
