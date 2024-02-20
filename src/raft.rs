@@ -2763,7 +2763,7 @@ impl<T: Storage> Raft<T> {
         let snap_time = revice_time - send_time;
         info!(
             self.logger,
-             "create a new snapshot after {:?}",snap_time;
+             "receive a new snapshot after {:?}",snap_time;
              "id" => self.id,
          ); 
                  
