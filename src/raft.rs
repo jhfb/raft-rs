@@ -802,7 +802,7 @@ impl<T: Storage> RaftCore<T> {
             }
             fatal!(self.logger, "unexpected error: {:?}", e);
         }
-        let snapshot = snapshot_r.unwrap();
+        let mut snapshot = snapshot_r.unwrap();
         if snapshot.get_metadata().index == 0 {
             fatal!(self.logger, "need non-empty snapshot");
         }
