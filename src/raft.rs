@@ -2759,7 +2759,7 @@ impl<T: Storage> Raft<T> {
         //计算快照耗时
         let send_time = metadata.send_time;
         let expected = UNIX_EPOCH.elapsed().unwrap().as_nanos();
-        let revice_time =  expected as i64;
+        let revice_time =  expected as u64;
         let snap_time = revice_time - send_time;
         info!(
             self.logger,
